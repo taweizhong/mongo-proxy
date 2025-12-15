@@ -1,4 +1,4 @@
-package pxmgo
+package api
 
 import (
 	"bufio"

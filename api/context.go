@@ -1,4 +1,4 @@
-package pxmgo
+package api
 
 import (
 	"bufio"
@@ -40,11 +40,23 @@ func (p *implContext) Next() <-chan protocol.Message {
 }
 
 func (p *implContext) SendMessage(msg protocol.Message) error {
-	addrRespTo := &(msg.Header().ResponseTo)
-	old := atomic.LoadInt32(addrRespTo)
-	atomic.StoreInt32(addrRespTo, p.reqId)
+	h := msg.Header()
+	if h == nil {
+		return fmt.Errorf("nil header in %T", msg)
+	}
+
+	oldReq := h.RequestID
+	oldResp := h.ResponseTo
+
+	reqID := atomic.AddInt32(&p.reqId, 1)
+	h.RequestID = reqID
+	h.ResponseTo = 0
+
 	bs, err := msg.Encode()
-	atomic.StoreInt32(addrRespTo, old)
+
+	h.RequestID = oldReq
+	h.ResponseTo = oldResp
+
 	if err != nil {
 		return err
 	}
@@ -117,6 +129,7 @@ func (p *implContext) nextMessage() (protocol.Message, error) {
 		return nil, err
 	}
 	p.reqId = msg.Header().RequestID
+	// 跑中间件
 	for _, it := range p.middlewares {
 		err = it.Handle(p, msg)
 		if err != nil {
